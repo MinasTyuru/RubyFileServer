@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+
+require 'socket'
+require 'cgi'
+
+server = TCPServer.new('127.0.0.1', 8888)
+home_path = Dir.getwd #Get home path
+
+puts 'Listening on 127.0.0.1:8888'
+loop {
+  client = server.accept
+  first_request_header = client.gets
+  #Get path requested
+  url = first_request_header.split()[1] #End of url requested
+  url_path, sort = url.split('?') #Break into url and sort method
+  path = url_path.split('/') #Break into successive directories
+  path.shift #Remove first /
+  puts("\nPath: " + path.join(','))
+  if not sort.nil?
+    puts('Sort: ' + sort.to_s)
+  end
+
+  #Navigate as far down requested path as possible
+  Dir.chdir(home_path) #Go back to home path
+  path.each {
+    |dirname|
+    if File.directory?(dirname)
+      Dir.chdir(dirname)
+    else break
+    end
+  }
+  
+  #Start HTML table
+  resp = '<table border = "1">'
+  resp += '<tr><td>File name</td><td>Size (bytes)</td><td>Date Modified</td></tr>'
+
+  #Add files in current directory to response
+  Dir.foreach ('.') {
+    |filename|
+    if File.directory?(filename)
+      #Get current relative path
+      rel_path = Dir.getwd
+      rel_path.slice!(home_path)
+      #Add directory name
+      dirpath = rel_path + "/" + filename
+      #Make link
+      filetxt = '<a href="' + dirpath + '">'
+      filetxt += filename + '</a>'
+    else
+      filetxt = filename
+    end
+    resp += "<tr><td>" + filetxt + "</td>"
+      
+    size = File.size(filename)
+    mod_time = File.stat(filename).mtime
+    resp += "<td>" + size.to_s() + "</td>"
+    resp += "<td>" + mod_time.asctime + "</td>"
+    resp += "</tr>"
+  }
+  resp += "</table>"
+  
+  #Make headers
+  headers = ['http/1.1 200 ok',
+             "date: #{CGI.rfc1123_date(Time.now)}",
+             'server: ruby',
+             'content-type: text/html; charset=iso-8859-1',
+             "content-length: #{resp.length}\r\n\r\n"].join("\r\n")
+  client.puts headers          # send the time to the client
+  client.puts resp
+  client.close
+}
